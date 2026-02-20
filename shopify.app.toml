@@ -22,7 +22,98 @@ api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products"
+scopes = "write_products,read_metaobjects,write_metaobjects,write_metaobject_definitions,read_cart_transforms,write_cart_transforms"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
+
+# Product metafield: assign a bundle config to a product (visible in Shopify admin)
+[product.metafields.app.bundle_config]
+type = "metaobject_reference<$app:bundle_config>"
+name = "Bundle Config"
+description = "Bundle configuration for this product"
+access.admin = "merchant_read_write"
+
+# Cart transform metafield: bundle config as JSON (same data as bundle_config metaobject)
+# Store on the cart transform (function owner) - populated via GraphQL after cartTransformCreate
+# If TOML doesn't support cart_transform owner, create via metafieldDefinitionCreate mutation
+[cart_transform.metafields.app.bundle_config_json]
+type = "json"
+name = "Bundle Config (JSON)"
+description = "Bundle configuration as JSON. Mirrors the bundle_config metaobject structure."
+access.admin = "merchant_read_write"
+
+# Product pool: a group of product variants that can be selected in a bundle
+[metaobjects.app.product_pool]
+name = "Product Pool"
+description = "A pool of product variants that can be included in a bundle"
+display_name_field = "name"
+access.admin = "merchant_read_write"
+
+[metaobjects.app.product_pool.fields.name]
+name = "Name"
+type = "single_line_text_field"
+description = "Optional name for the pool (e.g. Main products, Add-ons)"
+
+[metaobjects.app.product_pool.fields.variants]
+name = "Variants"
+type = "list.variant_reference"
+description = "Product variants included in this pool"
+
+[metaobjects.app.product_pool.fields.quantity_limit_type]
+name = "Quantity Limit Type"
+type = "single_line_text_field"
+description = "Whether and how to limit items from this pool in the bundle"
+validations.choices = ["no_limit", "limit"]
+
+[metaobjects.app.product_pool.fields.quantity_limit]
+name = "Quantity Limit"
+type = "number_integer"
+description = "Max items from this pool when quantity limit type is 'limit'"
+validations.min = 1
+
+# Bundle config: pricing, quantity limits, conditions, and product pools
+[metaobjects.app.bundle_config]
+name = "Bundle Config"
+description = "Configuration for a bundle: pricing, quantity limits, and product pools"
+display_name_field = "name"
+access.admin = "merchant_read_write"
+
+[metaobjects.app.bundle_config.fields.name]
+name = "Bundle Name"
+type = "single_line_text_field"
+required = true
+
+[metaobjects.app.bundle_config.fields.price_type]
+name = "Price Type"
+type = "single_line_text_field"
+description = "How the bundle is priced"
+validations.choices = ["original", "fixed", "discounted"]
+
+[metaobjects.app.bundle_config.fields.fixed_price]
+name = "Fixed Price"
+type = "money"
+description = "Used when price type is 'fixed'"
+
+[metaobjects.app.bundle_config.fields.discount_percentage]
+name = "Discount Percentage"
+type = "number_decimal"
+description = "Percentage discount when price type is 'discounted'"
+validations.min = 0
+validations.max = 100
+
+[metaobjects.app.bundle_config.fields.bundle_condition_type]
+name = "Bundle Condition Type"
+type = "single_line_text_field"
+description = "When the bundle applies"
+validations.choices = ["global", "condition"]
+
+[metaobjects.app.bundle_config.fields.product_pools]
+name = "Product Pools"
+type = "list.metaobject_reference<$app:product_pool>"
+description = "Pools of variants that make up this bundle"
+
+[metaobjects.app.bundle_config.fields.included_variants]
+name = "Included Variants"
+type = "list.variant_reference"
+description = "Product variants that are included in this bundle"

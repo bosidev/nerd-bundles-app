@@ -1,0 +1,35 @@
+query CartTransformRunInput {
+  cart {
+    lines {
+      id
+      quantity
+      merchandise {
+        ... on ProductVariant {
+          id
+        }
+      }
+      bundleIdAttr: attribute(key: "_bundleId") {
+        key
+        value
+      }
+      bundleNameAttr: attribute(key: "_bundleName") {
+        key
+        value
+      }
+      bundleSizeAttr: attribute(key: "_bundleSize") {
+        key
+        value
+      }
+      cost {
+        totalAmount {
+          amount
+        }
+      }
+    }
+  }
+  cartTransform {
+    bundleConfigJson: metafield(namespace: "$app", key: "bundle_config_json") {
+      jsonValue
+    }
+  }
+}
