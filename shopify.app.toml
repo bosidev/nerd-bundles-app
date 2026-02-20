@@ -2,12 +2,11 @@
 
 client_id = "b9c2085705ab7ef5c0b50352c962fdca"
 name = "Nerd Bundles"
-application_url = "https://example.com"
+application_url = "https://nerd-bundles-app.onrender.com"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
@@ -25,7 +24,11 @@ api_version = "2026-04"
 scopes = "write_products,read_metaobjects,write_metaobjects,write_metaobject_definitions,read_cart_transforms,write_cart_transforms"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ 
+    "https://nerd-bundles-app.onrender.com/api/auth", 
+    "https://nerd-bundles-app.onrender.com/auth/shopify/callback",
+    "https://nerd-bundles-app.onrender.com/api/auth/callback" 
+  ]
 
 # Product metafield: assign a bundle config to a product (visible in Shopify admin)
 [product.metafields.app.bundle_config]
