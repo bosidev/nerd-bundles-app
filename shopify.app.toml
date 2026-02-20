@@ -72,6 +72,11 @@ type = "number_integer"
 description = "Max items from this pool when quantity limit type is 'limit'"
 validations.min = 1
 
+[metaobjects.app.product_pool.fields.bundle_config_id]
+name = "Bundle Config ID"
+type = "single_line_text_field"
+description = "GID of the bundle_config this pool belongs to (used to clean up orphaned pools on bundle delete)"
+
 # Bundle config: pricing, quantity limits, conditions, and product pools
 [metaobjects.app.bundle_config]
 name = "Bundle Config"

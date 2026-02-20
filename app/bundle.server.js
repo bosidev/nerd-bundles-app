@@ -31,13 +31,23 @@ function toVariantGid(id) {
  * Create product_pool metaobjects for each pool
  * @param {object} admin - Shopify Admin API client
  * @param {Array<{id: string, name: string, variants: Array<{variantId: string}>}>} productPools
+ * @param {string} [bundleConfigId] - optional bundle_config GID to link pools to (for cleanup on delete)
  * @returns {Promise<string[]>} Array of created product_pool metaobject GIDs
  */
-async function createProductPoolMetaobjects(admin, productPools) {
+async function createProductPoolMetaobjects(admin, productPools, bundleConfigId) {
   const poolIds = [];
   for (const pool of productPools) {
     const variantRefs = pool.variants.map((v) => toVariantGid(v.variantId));
     const value = JSON.stringify(variantRefs);
+    const fields = [
+      { key: "name", value: pool.name || `Pool ${poolIds.length + 1}` },
+      { key: "variants", value },
+      { key: "quantity_limit_type", value: pool.quantityLimitType ?? "no_limit" },
+      { key: "quantity_limit", value: String(pool.quantityLimit ?? 1) },
+    ];
+    if (bundleConfigId) {
+      fields.push({ key: "bundle_config_id", value: bundleConfigId });
+    }
 
     const mutation = `
       mutation CreateProductPool($metaobject: MetaobjectCreateInput!) {
@@ -51,12 +61,7 @@ async function createProductPoolMetaobjects(admin, productPools) {
       variables: {
         metaobject: {
           type: "$app:product_pool",
-          fields: [
-            { key: "name", value: pool.name || `Pool ${poolIds.length + 1}` },
-            { key: "variants", value },
-            { key: "quantity_limit_type", value: pool.quantityLimitType ?? "no_limit" },
-            { key: "quantity_limit", value: String(pool.quantityLimit ?? 1) },
-          ],
+          fields,
         },
       },
     });
@@ -83,10 +88,20 @@ async function createProductPoolMetaobjects(admin, productPools) {
  * @param {object} admin
  * @param {string} metaobjectId - product_pool metaobject GID
  * @param {{ name?: string, variants: Array<{variantId: string}> }} pool
+ * @param {string} [bundleConfigId] - optional bundle_config GID (keeps pool linked for cleanup on delete)
  */
-async function updateProductPoolMetaobject(admin, metaobjectId, pool) {
+async function updateProductPoolMetaobject(admin, metaobjectId, pool, bundleConfigId) {
   const variantRefs = (pool.variants ?? []).map((v) => toVariantGid(v.variantId));
   const value = JSON.stringify(variantRefs);
+  const fields = [
+    { key: "name", value: pool.name || "" },
+    { key: "variants", value },
+    { key: "quantity_limit_type", value: pool.quantityLimitType ?? "no_limit" },
+    { key: "quantity_limit", value: String(pool.quantityLimit ?? 1) },
+  ];
+  if (bundleConfigId) {
+    fields.push({ key: "bundle_config_id", value: bundleConfigId });
+  }
   const mutation = `
     mutation UpdateProductPool($id: ID!, $metaobject: MetaobjectUpdateInput!) {
       metaobjectUpdate(id: $id, metaobject: $metaobject) {
@@ -98,14 +113,7 @@ async function updateProductPoolMetaobject(admin, metaobjectId, pool) {
   const response = await admin.graphql(mutation, {
     variables: {
       id: metaobjectId,
-      metaobject: {
-        fields: [
-          { key: "name", value: pool.name || "" },
-          { key: "variants", value },
-          { key: "quantity_limit_type", value: pool.quantityLimitType ?? "no_limit" },
-          { key: "quantity_limit", value: String(pool.quantityLimit ?? 1) },
-        ],
-      },
+      metaobject: { fields },
     },
   });
   const json = await response.json();
@@ -123,21 +131,54 @@ async function updateProductPoolMetaobject(admin, metaobjectId, pool) {
  * Returns array of product_pool metaobject GIDs in the same order as productPools.
  * @param {object} admin
  * @param {Array<{metaobjectId?: string, name?: string, variants: Array<{variantId: string}>}>} productPools
+ * @param {string} [bundleConfigId] - optional bundle_config GID to link pools to (for cleanup on delete)
  * @returns {Promise<string[]>}
  */
-async function getOrUpdateProductPoolMetaobjectIds(admin, productPools) {
+async function getOrUpdateProductPoolMetaobjectIds(admin, productPools, bundleConfigId) {
   const poolIds = [];
   for (let i = 0; i < productPools.length; i++) {
     const pool = productPools[i];
     if (pool.metaobjectId) {
-      await updateProductPoolMetaobject(admin, pool.metaobjectId, pool);
+      await updateProductPoolMetaobject(admin, pool.metaobjectId, pool, bundleConfigId);
       poolIds.push(pool.metaobjectId);
     } else {
-      const created = await createProductPoolMetaobjects(admin, [pool]);
+      const created = await createProductPoolMetaobjects(admin, [pool], bundleConfigId);
       poolIds.push(created[0]);
     }
   }
   return poolIds;
+}
+
+/**
+ * Set bundle_config_id on product_pool metaobjects (used after creating a new bundle so pools are linked for cleanup).
+ * @param {object} admin
+ * @param {string[]} productPoolMetaobjectIds - GIDs of product_pool metaobjects
+ * @param {string} bundleConfigId - bundle_config metaobject GID
+ */
+async function setBundleConfigIdOnProductPools(admin, productPoolMetaobjectIds, bundleConfigId) {
+  const mutation = `
+    mutation UpdateProductPoolBundleConfigId($id: ID!, $metaobject: MetaobjectUpdateInput!) {
+      metaobjectUpdate(id: $id, metaobject: $metaobject) {
+        metaobject { id }
+        userErrors { field message }
+      }
+    }
+  `;
+  for (const poolId of productPoolMetaobjectIds) {
+    const response = await admin.graphql(mutation, {
+      variables: {
+        id: poolId,
+        metaobject: {
+          fields: [{ key: "bundle_config_id", value: bundleConfigId }],
+        },
+      },
+    });
+    const json = await response.json();
+    const { metaobjectUpdate } = json.data;
+    if (metaobjectUpdate.userErrors?.length) {
+      console.warn("[bundle] setBundleConfigIdOnProductPools: metaobjectUpdate userErrors:", metaobjectUpdate.userErrors);
+    }
+  }
 }
 
 /**
@@ -452,6 +493,50 @@ async function getProductPoolMetaobjectIds(admin, bundleConfigId) {
 }
 
 /**
+ * Fetch all product_pool metaobject GIDs that belong to this bundle_config (by bundle_config_id field).
+ * Includes pools that were previously removed from the bundle, so they can be deleted when the bundle is deleted.
+ * Uses paginated list + filter so it works even when the field is not marked filterable in the definition.
+ * @param {object} admin
+ * @param {string} bundleConfigId - bundle_config metaobject GID
+ * @returns {Promise<string[]>} Array of product_pool metaobject GIDs
+ */
+async function getProductPoolMetaobjectIdsByBundleConfig(admin, bundleConfigId) {
+  const ids = [];
+  let hasNextPage = true;
+  let cursor = null;
+  const type = "$app:product_pool";
+
+  while (hasNextPage) {
+    const query = `
+      query ListProductPools($first: Int!, $after: String) {
+        metaobjects(first: $first, type: "${type}", after: $after) {
+          edges {
+            node {
+              id
+              field(key: "bundle_config_id") { value }
+            }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    `;
+    const response = await admin.graphql(query, { variables: { first: 250, after: cursor } });
+    const json = await response.json();
+    if (json.errors?.length) throw new Error(json.errors[0].message);
+    const { edges, pageInfo } = json.data?.metaobjects ?? {};
+    for (const edge of edges ?? []) {
+      const node = edge?.node;
+      if (!node?.id) continue;
+      const value = node.field?.value;
+      if (value === bundleConfigId) ids.push(node.id);
+    }
+    hasNextPage = pageInfo?.hasNextPage ?? false;
+    cursor = pageInfo?.endCursor ?? null;
+  }
+  return ids;
+}
+
+/**
  * Get a single bundle by product ID (numeric part or full GID).
  * Enriches productPools with metaobjectId so the edit form can update existing pools in place.
  * @param {object} admin
@@ -726,9 +811,12 @@ export async function deleteBundle(admin, productIdParam) {
   await setCartTransformBundles(admin, cartTransformId, bundles);
   console.log("[bundle] deleteBundle: removed from cart transform, bundles left =", bundles.length);
 
-  // 2. Delete product_pool metaobjects, then bundle_config
-  const poolIds = await getProductPoolMetaobjectIds(admin, bundleConfigId);
-  for (const metaobjectId of poolIds) {
+  // 2. Delete all product_pool metaobjects linked to this bundle (current + any previously removed from bundle)
+  const poolsFromConfig = await getProductPoolMetaobjectIds(admin, bundleConfigId);
+  const poolsByBundleConfigId = await getProductPoolMetaobjectIdsByBundleConfig(admin, bundleConfigId);
+  const allPoolIds = [...new Set([...poolsFromConfig, ...poolsByBundleConfigId])];
+  console.log("[bundle] deleteBundle: deleting product pools, from config =", poolsFromConfig.length, "by bundle_config_id =", poolsByBundleConfigId.length, "total =", allPoolIds.length);
+  for (const metaobjectId of allPoolIds) {
     const mutation = `
       mutation DeleteMetaobject($id: ID!) {
         metaobjectDelete(id: $id) {
@@ -802,7 +890,11 @@ export async function updateBundle(admin, productId, bundleConfigId, formState) 
 
   const shopCurrencyCode = await getShopCurrencyCode(admin);
   console.log("[bundle] updateBundle: updating or creating product pools...");
-  const productPoolMetaobjectIds = await getOrUpdateProductPoolMetaobjectIds(admin, formState.productPools);
+  const productPoolMetaobjectIds = await getOrUpdateProductPoolMetaobjectIds(
+    admin,
+    formState.productPools,
+    bundleConfigId
+  );
   console.log("[bundle] updateBundle: updating bundle_config metaobject...");
   await updateBundleConfigMetaobject(
     admin,
@@ -862,6 +954,7 @@ export async function createBundle(admin, formState) {
     productPoolMetaobjectIds,
     shopCurrencyCode
   );
+  await setBundleConfigIdOnProductPools(admin, productPoolMetaobjectIds, bundleConfigId);
   const productId = await createBundleProduct(admin, formState.bundleName, bundleConfigId);
   const variantId = await getFirstVariantIdForProduct(admin, productId);
 
