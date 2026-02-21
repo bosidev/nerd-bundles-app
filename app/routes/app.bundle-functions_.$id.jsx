@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useLoaderData, useNavigation, useActionData, redirect } from "react-router";
+import { Form, useLoaderData, useNavigation, useActionData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -69,7 +69,7 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, redirect, session } = await authenticate.admin(request);
   if (request.method !== "POST") return null;
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -338,7 +338,7 @@ export default function EditBundlePage() {
         </button>
       </ui-save-bar>
 
-      <form method="post" id="edit-bundle-form">
+      <Form method="post" id="edit-bundle-form">
         <input type="hidden" name="formState" value={JSON.stringify(formState)} />
         <input type="hidden" name="productId" value={bundle.productId} />
         <input type="hidden" name="bundleConfigId" value={bundle.bundleConfigId} />
@@ -579,33 +579,33 @@ export default function EditBundlePage() {
               />
             )}
           </s-section>
-          <s-section>
-            <s-stack gap="base" padding="base none">
-              <s-text variant="headingMd" as="h2" tone="critical">
-                Danger zone
-              </s-text>
-              {actionData?.error && (
-                <s-banner tone="critical" onDismiss={() => {}}>
-                  {actionData.error}
-                </s-banner>
-              )}
-              <form method="post" id="delete-bundle-form" ref={deleteFormRef}>
-                <input type="hidden" name="intent" value="delete" />
-                <input type="hidden" name="productId" value={bundle.productId} />
-                <s-button
-                  type="button"
-                  variant="primary"
-                  tone="critical"
-                  onClick={handleDeleteClick}
-                  accessibilityLabel="Delete this bundle permanently"
-                >
-                  Delete bundle
-                </s-button>
-              </form>
-            </s-stack>
-          </s-section>
         </s-stack>
-      </form>
+      </Form>
+      <s-section>
+        <s-stack gap="base" padding="base none">
+          <s-text variant="headingMd" as="h2" tone="critical">
+            Danger zone
+          </s-text>
+          {actionData?.error && (
+            <s-banner tone="critical" onDismiss={() => {}}>
+              {actionData.error}
+            </s-banner>
+          )}
+          <Form method="post" id="delete-bundle-form" ref={deleteFormRef}>
+            <input type="hidden" name="intent" value="delete" />
+            <input type="hidden" name="productId" value={bundle.productId} />
+            <s-button
+              type="button"
+              variant="primary"
+              tone="critical"
+              onClick={handleDeleteClick}
+              accessibilityLabel="Delete this bundle permanently"
+            >
+              Delete bundle
+            </s-button>
+          </Form>
+        </s-stack>
+      </s-section>
     </s-page>
   );
 }

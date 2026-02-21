@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigation } from "react-router";
+import { Form, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -29,7 +29,7 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   console.log("[action] entered, method:", request.method);
 
-  const { admin } = await authenticate.admin(request);
+  const { admin, session, redirect } = await authenticate.admin(request);
   console.log("[action] authenticated");
 
   if (request.method !== "POST") {
@@ -63,9 +63,9 @@ export const action = async ({ request }) => {
     const { productId } = await createBundle(admin, formState);
     console.log("[action] createBundle success, productId:", productId);
     const url = new URL(request.url);
-    const redirectTo = `${url.origin}/app/bundle-functions`;
+    const redirectTo = `/app/bundle-functions`;
     console.log("[action] redirecting to:", redirectTo);
-    return Response.redirect(redirectTo);
+    return redirect(redirectTo);
   } catch (err) {
     console.error("[action] createBundle error:", err);
     console.error("[action] error message:", err?.message);
@@ -203,7 +203,7 @@ export default function Index() {
 
   return (
     <s-page heading="Create bundle function">
-      <form method="post">
+      <Form method="post">
         <input
           type="hidden"
           name="formState"
@@ -454,7 +454,7 @@ export default function Index() {
             {isSubmitting ? "Creating…" : "Create bundle"}
           </s-button>
         </s-stack>
-      </form>
+      </Form>
     </s-page>
   );
 }
